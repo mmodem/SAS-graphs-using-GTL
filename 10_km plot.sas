@@ -1,5 +1,5 @@
 /*get data*/
-proc import datafile="H:\GTL paper\Input_data.xlsx" out=adtte_ dbms=xlsx replace;
+proc import datafile="H:\GTL paper\Input_data.xlsx" out=adtte dbms=xlsx replace;
 	sheet="10.Kmplot";
 run;
 
@@ -11,13 +11,7 @@ proc format;
  ;
 run;
 
-data adtte;
-	set adtte_;
-	if cnsr=0 then cnsr=1;
-	else if cnsr=1 then cnsr=0;
-run;
-
-proc sort;
+proc sort data=adtte;
 	by trtn id;
 run;
 
@@ -25,14 +19,13 @@ run;
 ods listing close;
 ods graphics on;
 ods output SurvivalPlot= surv_risk;
-proc lifetest data= adtte plots=survival(atrisk=0 26 50 78) 
-		outsurv=surv timelist=(0 26 50 78) reduceout;
+proc lifetest data= adtte plots=survival(atrisk=0 20 40 60) 
+		outsurv=surv timelist=(0 20 40 60) reduceout;
 	time aval*cnsr(1);
 	strata trtn;
 run;
 ods _all_ close;
 ods listing;
-
 
 /*estimates data which is included as annotate dataset in the graph*/
 data surv2;
@@ -40,7 +33,7 @@ data surv2;
 	set surv;
 	length label $40 desc $80;
 	format stratum trt. ;
-	where timelist in (26 50 78);
+	where timelist in (20 40 60);
 	failure=1-survival;
 	f_sdf_ucl = 1-sdf_lcl;
 	f_sdf_lcl = 1-sdf_ucl;
@@ -48,17 +41,17 @@ data surv2;
 	if failure = 0 then label = strip(put(failure, 8.3));
 	else label = strip(put(failure, 8.3)) || ' (' || strip(put(f_sdf_lcl, 8.3)) || ', ' || strip(put(f_sdf_ucl, 8.3)) || ')'; 
 	**X1 coordinates;
-	if timelist = 26 then x1 = 32 ;
-	else if timelist = 50 then x1 = 50.5;
-	else if timelist = 78 then x1 = 68.5;
+	if timelist = 20 then x1 = 30 ;
+	else if timelist = 40 then x1 = 49;
+	else if timelist = 60 then x1 = 69;
 	**Y1 coordinates;
-	if stratum = 1 then y1 = 76 ;
-	else if stratum = 2 then y1 = 73;
-	else if stratum = 3 then y1 = 70;
+	if stratum = 1 then y1 = 75 ;
+	else if stratum = 2 then y1 = 78;
+	else if stratum = 3 then y1 = 81;
 	**column header (desc);
-	if timelist = 26 then desc = 'Estimated proportion 	at Week 26' ;
-	else if timelist = 50 then desc = 'Estimated proportion	at Week 50' ;
-	else if timelist = 78 then desc = 'Estimated proportion	at Week 78' ;
+	if timelist = 20 then desc = 'Estimated proportion 	at Week 20' ;
+	else if timelist = 40 then desc = 'Estimated proportion	at Week 40' ;
+	else if timelist = 60 then desc = 'Estimated proportion	at Week 60' ;
 	keep function stratum label x1: y1: desc text: width widthunit justify timelist;
 run;
 
@@ -70,10 +63,10 @@ run;
 data est2;
 	set est(drop=label);
 	length label $100;
-	y1=81;
+	y1=88;
 	label = 'Estimated proportion (95% CI)';
 	output;
-	y1=79;
+	y1=85;
 	label=substr(desc, 22);
 	output;
 run;
@@ -81,7 +74,7 @@ run;
 
 data surv3 (drop=iter );
 	length label $40 ;
-	y1= 67;
+	y1= 72;
 	do label = "Active high dose", "Active low dose", "Placebo        ";
 		x1space = 'graphpercent' ; y1space = 'graphpercent'; function ='text'; textsize =8; textcolor ='black'; 
 		width =20; widthunit ='percent'; anchor ='left'; x1 = 12.5; iter=3; y1 + iter ;
@@ -119,25 +112,6 @@ data surv_risk2;
 	if stratumnum =1 then time= time;
 run;
 
-/*to create wk85 and assign wk78 values to it so that step plot doesn't have veritical lines at the end*/
-data dummy;
-	set surv_risk2;
-	by stratumnum time;
-	if last.stratumnum;
-	tatrisk= . ;
-	atrisk = .;
-	time=time+7;
-run;
-
-
-/*suvival results + dummy data*/
-data surv_risk3;
-	set surv_risk2(in=a)
-		dummy;
-	by stratumnum time;
-run;
-
-
 ***graph procedures;
 ods path show;
 ods path work.testtemp(update) sashelp.tmplmst(read);
@@ -159,9 +133,9 @@ proc template;
 			/*step plot*/
        	layout overlay/xaxisopts=(offsetmin=0.15 offsetmax=0.1
 										label = "Weeks" 
-									  linearopts=(tickvaluelist= (0 26 50 78)))
-						   yaxisopts=(offsetmin=0.1 offsetmax=0.38 label = 'Probability of progression'
-										linearopts=(TICKVALUEPRIORITY = true tickvaluesequence=(start=0 end=0.20 increment=0.05)));
+									  linearopts=(tickvaluelist= (0 20 40 60)))
+						   yaxisopts=(offsetmin=0.1 offsetmax=0.28 label = 'Probability of progression'
+										linearopts=(TICKVALUEPRIORITY = true tickvaluesequence=(start=0 end=0.5 increment=0.1)));
  
 					stepplot x= time y= failure /group=Attr_trtname  name='step' ;  
 					scatterplot x= time y= f_censored /group=Attr_trtname  name='scatter' markerattrs=(symbol=plus color=black) ;
@@ -189,9 +163,10 @@ run;
 %let gpathname=H:\GTL paper;
 
 options orientation=landscape ;
-ods rtf file = "&gpathname\kmplot.rtf" image_dpi=200 ;
+ods rtf file ="&gpathname\kmplot.rtf" image_dpi=200 ;
 ods graphics on/reset=all height=7in width=9in imagename="kmplot" imagefmt=png noborder  ; 
-proc sgrender data=surv_risk3 template=km2 sganno=anno; 
+proc sgrender data=surv_risk2 template=km2 sganno=anno; 
 run;
 ods _all_ close;
 ods listing;
+
